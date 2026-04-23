@@ -197,7 +197,7 @@ async function runRealLoop(
         endReason = "cancelled";
         break;
       }
-      throw new Error(`Opus call failed on turn ${turn + 1}: ${formatError(err)}`);
+      throw new Error(`Model call failed on turn ${turn + 1}: ${formatError(err)}`);
     }
 
     tokensIn += final.usage.input_tokens ?? 0;
