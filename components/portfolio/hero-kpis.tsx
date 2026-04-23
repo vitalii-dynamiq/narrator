@@ -1,56 +1,69 @@
 "use client";
 
 import { Card } from "@/components/ui/card";
-import { ArrowUpRight, ArrowDownRight, Sparkles } from "lucide-react";
-import { formatEur, formatEurCompact, formatDelta, formatPct, signedClass } from "@/lib/format";
-import { Line, LineChart, ResponsiveContainer } from "recharts";
+import { ArrowUpRight, ArrowDownRight } from "lucide-react";
+import { formatEurCompact, formatDelta, formatPct, signedClass } from "@/lib/format";
 import type { PortfolioResponse } from "./portfolio-overview";
 
+// Headline KPIs for the portfolio page. Every number here is computed client-
+// side from the `/api/portfolio` hero payload — which in turn calls resolve()
+// + portfolioFV() on the live cube. No hardcoded narrative, no fake sparklines.
 export function HeroKpis({ data }: { data: PortfolioResponse["hero"] }) {
-  const aumChangePct = data.aumPrior > 0 ? (data.aum - data.aumPrior) / data.aumPrior : 0;
-  const fvChange = data.fvChange;
+  const fvDelta = data.aum - data.aumPrior;
+  const fvChangePct = data.aumPrior > 0 ? fvDelta / data.aumPrior : 0;
+
   const ebitdaVarBudget = data.totalEbitdaYtd - data.totalEbitdaBudget;
   const ebitdaVarBudgetPct =
     data.totalEbitdaBudget > 0 ? ebitdaVarBudget / data.totalEbitdaBudget : 0;
-  const irr = 0.184;
-  const irrDelta = 0.003;
 
-  const tiles = [
+  const currentMargin =
+    data.totalRevenueYtd > 0 ? data.totalEbitdaYtd / data.totalRevenueYtd : 0;
+  const budgetMargin =
+    data.totalRevenueBudget > 0
+      ? data.totalEbitdaBudget / data.totalRevenueBudget
+      : 0;
+  const marginDeltaBps = Math.round((currentMargin - budgetMargin) * 10_000);
+
+  const tiles: Array<{
+    label: string;
+    value: string;
+    subtitle: string;
+    positive: boolean;
+    signedValue: boolean;
+  }> = [
     {
       label: "Portfolio Fair Value",
-      value: formatEur(data.aum, { digits: 0 }),
-      subtitle: `${formatDelta(data.aum - data.aumPrior)} vs V1 · ${formatPct(aumChangePct, { signed: true })}`,
-      positive: data.aum - data.aumPrior >= 0,
-      commentary: "Fair value change driven by multiple expansion in Atlas Benelux (+€14M) offset by Fortuna DE compression (−€4.1M).",
-      series: sparkFake([data.aumPrior, data.aum], 12, 0.015),
+      value: formatEurCompact(data.aum),
+      subtitle: `${formatDelta(fvDelta)} vs V1 · ${formatPct(fvChangePct, { signed: true })}`,
+      positive: fvDelta >= 0,
+      signedValue: false,
     },
     {
-      label: "Fair Value Change",
-      value: formatDelta(fvChange, { compact: false }),
-      subtitle: "Valuation V2 vs V1 · bridge decomposed across 6 legs",
-      positive: fvChange >= 0,
-      commentary: "Multiple effect contributes +€31M, EBITDA effect −€6M, FX +€1.2M, leverage-neutral.",
-      series: sparkFake([0, fvChange], 12, 0.1),
+      label: "Fair Value Change (V1 → V2)",
+      value: formatDelta(data.fvChange, { compact: true }),
+      subtitle: "Bridge: EBITDA + Multiple + Leverage + FX + Cross + Other",
+      positive: data.fvChange >= 0,
+      signedValue: true,
     },
     {
       label: "EBITDA YTD vs Budget",
-      value: formatDelta(ebitdaVarBudget, { compact: false }),
-      subtitle: `${formatEurCompact(data.totalEbitdaYtd)} vs ${formatEurCompact(data.totalEbitdaBudget)} · ${formatPct(
+      value: formatDelta(ebitdaVarBudget, { compact: true }),
+      subtitle: `${formatEurCompact(data.totalEbitdaYtd)} Actual · ${formatEurCompact(data.totalEbitdaBudget)} Budget · ${formatPct(
         ebitdaVarBudgetPct,
         { signed: true }
       )}`,
       positive: ebitdaVarBudget >= 0,
-      commentary:
-        "Four projects materially below plan; Fortuna and Kadenza carry most of the gap; partly offset by Vela and Helix.",
-      series: sparkFake([data.totalEbitdaBudget, data.totalEbitdaYtd], 12, 0.03),
+      signedValue: true,
     },
     {
-      label: "Net IRR (since inception)",
-      value: formatPct(irr, { digits: 1 }),
-      subtitle: `${formatPct(irrDelta, { signed: true, digits: 1 })} vs prior quarter · above gross target of 17%`,
-      positive: true,
-      commentary: "Weighted average hold period 3.4y; DPI 0.34x; TVPI 1.52x.",
-      series: sparkFake([0.18, irr], 12, 0.01),
+      label: "Portfolio EBITDA Margin",
+      value: formatPct(currentMargin, { digits: 1 }),
+      subtitle: `${marginDeltaBps >= 0 ? "+" : ""}${marginDeltaBps}bps vs Budget ${formatPct(
+        budgetMargin,
+        { digits: 1 }
+      )}`,
+      positive: marginDeltaBps >= 0,
+      signedValue: false,
     },
   ];
 
@@ -78,45 +91,17 @@ export function HeroKpis({ data }: { data: PortfolioResponse["hero"] }) {
             </div>
           </div>
           <div
-            className={`text-[22px] font-semibold tracking-tight tabular-nums pt-1 ${
-              t.label.includes("Change") ? signedClass(t.positive ? 1 : -1) : ""
+            className={`text-[24px] font-semibold tracking-tight tabular-nums pt-1.5 ${
+              t.signedValue ? signedClass(t.positive ? 1 : -1) : ""
             }`}
           >
             {t.value}
           </div>
-          <div className="text-[11.5px] text-muted-foreground tabular-nums">{t.subtitle}</div>
-          <div className="mt-2 h-[32px] -mx-1">
-            <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={t.series}>
-                <Line
-                  type="monotone"
-                  dataKey="v"
-                  stroke={t.positive ? "var(--positive)" : "var(--negative)"}
-                  strokeWidth={1.3}
-                  dot={false}
-                  isAnimationActive={false}
-                />
-              </LineChart>
-            </ResponsiveContainer>
-          </div>
-          <div className="pt-2 flex items-start gap-1.5 text-[11px] leading-snug text-muted-foreground italic">
-            <Sparkles className="h-3 w-3 shrink-0 mt-0.5 text-accent-blue" />
-            <span>{t.commentary}</span>
+          <div className="text-[11.5px] text-muted-foreground tabular-nums pt-0.5">
+            {t.subtitle}
           </div>
         </Card>
       ))}
     </div>
   );
-}
-
-function sparkFake(between: [number, number], steps = 12, jitter = 0.02) {
-  const [a, b] = between;
-  const delta = b - a;
-  const out: { v: number }[] = [];
-  for (let i = 0; i < steps; i++) {
-    const t = i / (steps - 1);
-    const noise = (Math.sin(i * 1.3 + a) * 0.5 + Math.cos(i * 0.6 + b) * 0.5) * jitter * Math.abs(delta || 1);
-    out.push({ v: a + delta * t + noise });
-  }
-  return out;
 }

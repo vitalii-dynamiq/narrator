@@ -5,13 +5,19 @@ import { useRouter } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Skeleton } from "@/components/ui/skeleton";
-import { LineChart, Line, ResponsiveContainer, Tooltip as RTooltip } from "recharts";
+import { LineChart, Line, ResponsiveContainer, Tooltip as RTooltip, YAxis } from "recharts";
 import { ChevronRight, Wand2, GitBranch, FileDigit } from "lucide-react";
-import { formatEur, formatEurCompact, formatCellValue, unitLabel, accountUnit } from "@/lib/format";
+import {
+  formatEur,
+  formatEurCompact,
+  formatCellValue,
+  unitLabel,
+  accountUnit,
+  chartDomain,
+} from "@/lib/format";
 import { formatPeriodHuman } from "@/lib/jedox/time";
 import type { CellRef } from "@/lib/jedox/schema";
 import { Button } from "@/components/ui/button";
-import { useConversationId } from "@/components/ask/conversation-context";
 
 interface Props {
   ref_: Partial<CellRef> & { entity: string; account: string; time: string; version: string };
@@ -121,7 +127,6 @@ function CellInspector({
   onOpenChange: (o: boolean) => void;
   fallbackValue: number | null;
 }) {
-  const conversationId = useConversationId();
   const coord = encodeCoord(cellRef);
   const { data, isLoading } = useQuery({
     queryKey: ["cell", coord],
@@ -187,6 +192,10 @@ function CellInspector({
               <div className="mt-2 h-24 rounded-md border border-border bg-background">
                 <ResponsiveContainer width="100%" height="100%">
                   <LineChart data={data.history} margin={{ top: 8, right: 8, bottom: 8, left: 8 }}>
+                    {/* Lock Y-axis for percent / ratio / multiple accounts so
+                        a sub-percentage-point wobble is visible. For EUR
+                        accounts we let Recharts auto-scale. */}
+                    <YAxis hide domain={chartDomain(cellRef.account, data.history) ?? ["auto", "auto"]} />
                     <Line
                       type="monotone"
                       dataKey="value"
@@ -276,7 +285,6 @@ function CellInspector({
             cellRef={cellRef}
             label={data?.labels}
             onNavigate={() => onOpenChange(false)}
-            conversationId={conversationId}
           />
         </div>
       </SheetContent>
@@ -288,17 +296,10 @@ function ExplainButton({
   cellRef,
   label,
   onNavigate,
-  conversationId,
 }: {
   cellRef: CellRef;
   label?: { entity: string; account: string; version: string };
   onNavigate: () => void;
-  /**
-   * When present, "Explain this number" continues the active conversation
-   * instead of opening a new one. Populated by any caller that's already in
-   * a chat session (ask-interface.tsx via the evidence drawer).
-   */
-  conversationId?: string | null;
 }) {
   const router = useRouter();
   return (
@@ -312,9 +313,8 @@ function ExplainButton({
         const version = label?.version ?? cellRef.version;
         const humanPeriod = formatPeriodHuman(cellRef.time);
         const q = `Explain ${account} for ${entity} at ${humanPeriod} (version ${version}). What drove it, and what should we watch next quarter?`;
-        const params = new URLSearchParams({ q });
-        if (conversationId) params.set("conv", conversationId);
-        router.push(`/ask?${params.toString()}`);
+        // Always start a fresh conversation — this is a drill-down, earns its own thread.
+        router.push(`/ask?q=${encodeURIComponent(q)}`);
         onNavigate();
       }}
     >

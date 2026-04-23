@@ -18,6 +18,7 @@ import {
   ACCOUNT_DERIVED,
   ACCOUNT_LEAVES,
   VERSIONS,
+  isStockAccount,
   type CellRef,
   type VersionId,
 } from "./schema";
@@ -602,9 +603,24 @@ export function resolve(opts: ResolveOpts): ResolvedValue | null {
     };
   }
 
-  // 3. Leaf account: aggregate across periods if period is quarterly/YTD/yearly
+  // 3. Leaf account: aggregate across periods if period is quarterly/YTD/yearly.
+  //
+  // Flow accounts (Revenue, EBITDA, CapEx, …) sum across the months in the
+  // window. Stock accounts (Cash, Debt, Equity, …) are point-in-time balances
+  // — collapse to the last month in the window so a YTD query returns the
+  // end-of-period snapshot, not a 3× inflated sum.
   const periods = isAnnualVersion && /^\d{4}$/.test(period) ? [period] : expandPeriod(period);
   if (periods.length > 1) {
+    if (isStockAccount(account)) {
+      const lastPeriod = periods[periods.length - 1];
+      const r = resolve({ ...opts, period: lastPeriod, _depth: depth + 1 });
+      if (!r) return null;
+      return {
+        ...r,
+        rule: `${account} @ end of ${period}`,
+        derived: true,
+      };
+    }
     let total = 0;
     const provenance: CellRef[] = [];
     for (const p of periods) {

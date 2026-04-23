@@ -14,14 +14,13 @@ import {
   Wand2,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useConversationId } from "./conversation-context";
-import { LineChart, Line, Tooltip as RTooltip, ResponsiveContainer } from "recharts";
+import { LineChart, Line, Tooltip as RTooltip, ResponsiveContainer, YAxis } from "recharts";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import type { RunState, SectionCitation } from "@/lib/agents/events";
 import type { CellRef } from "@/lib/jedox/schema";
-import { formatCellValue, formatCellValueCompact, unitLabel } from "@/lib/format";
+import { formatCellValue, formatCellValueCompact, unitLabel, chartDomain } from "@/lib/format";
 import { formatPeriodHuman } from "@/lib/jedox/time";
 import { encodeCellRef } from "@/lib/jedox/engine";
 
@@ -313,7 +312,6 @@ interface CellDetail {
 
 function InlineInspector({ row, onBack }: { row: EvidenceRow; onBack: () => void }) {
   const router = useRouter();
-  const conversationId = useConversationId();
   const cellRef: CellRef = {
     cube: "FIN_CUBE",
     entity: row.entity,
@@ -382,6 +380,8 @@ function InlineInspector({ row, onBack }: { row: EvidenceRow; onBack: () => void
                   data={data.history}
                   margin={{ top: 6, right: 6, bottom: 6, left: 6 }}
                 >
+                  {/* Lock Y-axis for percent / ratio / multiple accounts. */}
+                  <YAxis hide domain={chartDomain(row.account, data.history) ?? ["auto", "auto"]} />
                   <Line
                     type="monotone"
                     dataKey="value"
@@ -500,9 +500,8 @@ function InlineInspector({ row, onBack }: { row: EvidenceRow; onBack: () => void
             const q = `Explain ${accountLabel(row.account)} for ${entityLabel(
               row.entity
             )} at ${formatPeriodHuman(row.period)} (version ${row.version}). What drove it, and what should we watch next quarter?`;
-            const params = new URLSearchParams({ q });
-            if (conversationId) params.set("conv", conversationId);
-            router.push(`/ask?${params.toString()}`);
+            // Always start a fresh conversation — each drill-down earns its own thread.
+            router.push(`/ask?q=${encodeURIComponent(q)}`);
           }}
         >
           <Wand2 className="h-3.5 w-3.5" />

@@ -4,7 +4,6 @@ import { useQuery } from "@tanstack/react-query";
 import { HeroKpis } from "./hero-kpis";
 import { PortfolioHeatmap } from "./portfolio-heatmap";
 import { TopMovers } from "./top-movers";
-import { NarrativeFeed } from "./narrative-feed";
 import { AskHero } from "./ask-hero";
 import { Skeleton } from "@/components/ui/skeleton";
 
@@ -43,7 +42,6 @@ export interface PortfolioResponse {
   tiles: TileNode[];
   contributors: TileNode[];
   detractors: TileNode[];
-  insights: { agent: string; entity: string; title: string; body: string }[];
 }
 
 export function PortfolioOverview() {
@@ -91,27 +89,39 @@ export function PortfolioOverview() {
 
       <HeroKpis data={data.hero} />
 
-      <div className="grid grid-cols-12 gap-4">
-        <div className="col-span-12 lg:col-span-8">
-          <PortfolioHeatmap tiles={data.tiles} />
-        </div>
-        <div className="col-span-12 lg:col-span-4 space-y-4">
-          <TopMovers
-            title="Top Contributors"
-            subtitle="EBITDA variance vs Budget"
-            entries={data.contributors}
-            direction="up"
-          />
-          <TopMovers
-            title="Top Detractors"
-            subtitle="EBITDA variance vs Budget"
-            entries={data.detractors}
-            direction="down"
-          />
-        </div>
-      </div>
+      <PortfolioHeatmap tiles={data.tiles} />
 
-      <NarrativeFeed insights={data.insights} />
+      {(() => {
+        // Shared sparkline Y-domain across contributors + detractors so the
+        // visual height of each mini-chart encodes real relative magnitude,
+        // not row-local auto-scale.
+        const allSpark = [
+          ...data.contributors.flatMap((e) => e.sparkline),
+          ...data.detractors.flatMap((e) => e.sparkline),
+        ];
+        const sparkMin = allSpark.length ? Math.min(...allSpark) : 0;
+        const sparkMax = allSpark.length ? Math.max(...allSpark) : 1;
+        const pad = Math.max(1, (sparkMax - sparkMin) * 0.1);
+        const sparklineDomain: [number, number] = [sparkMin - pad, sparkMax + pad];
+        return (
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            <TopMovers
+              title="Top Contributors"
+              subtitle="EBITDA variance vs Budget"
+              entries={data.contributors}
+              direction="up"
+              sparklineDomain={sparklineDomain}
+            />
+            <TopMovers
+              title="Top Detractors"
+              subtitle="EBITDA variance vs Budget"
+              entries={data.detractors}
+              direction="down"
+              sparklineDomain={sparklineDomain}
+            />
+          </div>
+        );
+      })()}
     </div>
   );
 }

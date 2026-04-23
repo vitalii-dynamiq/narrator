@@ -30,8 +30,8 @@ interface TileNode {
   marginPctBudget: number;
   varianceBudgetPct: number; // revenue vs budget
   ebitdaVarBudget: number; // € delta
-  fvChange: number; // fair value change
-  aum: number; // proxy = revenue LTM
+  fvChange: number; // fair value change (V2 − V1)
+  aum: number; // fair value V2 (real, from bridge)
   sparkline: number[]; // 12m revenue series
 }
 
@@ -107,6 +107,10 @@ function buildTile(
   const varPct = revenueBudget > 0 ? (revenue - revenueBudget) / revenueBudget : 0;
   const bridge = computeEntityBridge(id);
   const fvChange = bridge?.legs.total ?? 0;
+  // Real AUM = the current V2 fair value for this entity/project/group from
+  // the valuation bridge. Falls back to a revenue proxy only if the bridge
+  // isn't computable (shouldn't happen in the seeded data).
+  const aum = bridge?.v2.fv ?? revenue * 4;
 
   return {
     id,
@@ -124,7 +128,7 @@ function buildTile(
     varianceBudgetPct: varPct,
     ebitdaVarBudget: ebitda - ebitdaBudget,
     fvChange,
-    aum: revenue * 4, // rough AUM proxy for tile sizing
+    aum,
     sparkline: monthlyRevenueSeries(id),
   };
 }
@@ -178,50 +182,19 @@ export async function GET() {
   for (const p of PROJECTS) tiles.push(buildTile(p.id, "project", p.group, p.label));
   for (const e of ENTITIES) tiles.push(buildTile(e.id, "entity", e.project, e.label));
 
-  // Top contributors / detractors at the entity level
+  // Top contributors / detractors at the entity level.
+  // Contributors = entities with genuinely positive EBITDA variance vs Budget
+  // (never a "least-bad" negative entity mislabeled as a contributor).
+  // Detractors = strictly negative variance. Capped at 5 per list.
   const entityTiles = tiles.filter((t) => t.level === "entity");
-  const byEbitdaVar = [...entityTiles].sort((a, b) => b.ebitdaVarBudget - a.ebitdaVarBudget);
-  const contributors = byEbitdaVar.slice(0, 5);
-  const detractors = byEbitdaVar.slice(-5).reverse();
-
-  // Narrative insights — hand-crafted, rooted in the mock data stories
-  const insights = [
-    {
-      agent: "Insight Discovery",
-      entity: "ENT_VELA_SE",
-      title: "Inflection detected in Vela SE — Nordic enterprise cohort",
-      body:
-        "Revenue +11.3% vs budget YTD after Swedish enterprise go-live in Oct 2025 (+18% ARR step-up); EBITDA +€0.95M over plan at 33.9% margin — above the 115% NDR thesis target.",
-    },
-    {
-      agent: "Variance Analyst",
-      entity: "ENT_FORTUNA_DE",
-      title: "Fortuna DE — linerboard ASP compression bites",
-      body:
-        "Revenue −€10.3M (−9.0%) and EBITDA −€5.1M (−29%) vs Budget YTD; gross margin −340bps vs plan on DACH linerboard pricing, with volume deferral from a key auto-adjacent customer compounding.",
-    },
-    {
-      agent: "Fair Valuation Bridge",
-      entity: "ENT_ATLAS_NL",
-      title: "Atlas NL — multiple expansion carries the FV story",
-      body:
-        "Logistics comp-set re-rated +1.5× EV/EBITDA over Q1; FV change driven almost entirely by multiple effect despite flat operating performance.",
-    },
-    {
-      agent: "Driver Decomposition",
-      entity: "ENT_HELIX_UK",
-      title: "Helix UK returns to positive EBITDA growth",
-      body:
-        "First positive YoY EBITDA growth in 3 quarters, driven by the CMA-approved tuck-in closing January 2026; post-synergy margin lift of +140bps expected to annualize by Q3.",
-    },
-    {
-      agent: "Insight Discovery",
-      entity: "ENT_ORION_LYON",
-      title: "Orion Lyon — €6.1M insurance recovery (one-off)",
-      body:
-        "Insurance recovery on the 2024 facility fire claim booked this quarter; flagged as one-off, excluded from run-rate fair valuation and LTM EBITDA bridges.",
-    },
-  ];
+  const contributors = entityTiles
+    .filter((t) => t.ebitdaVarBudget > 0)
+    .sort((a, b) => b.ebitdaVarBudget - a.ebitdaVarBudget)
+    .slice(0, 5);
+  const detractors = entityTiles
+    .filter((t) => t.ebitdaVarBudget < 0)
+    .sort((a, b) => a.ebitdaVarBudget - b.ebitdaVarBudget)
+    .slice(0, 5);
 
   return NextResponse.json({
     asOf: DEMO_CURRENT_PERIOD,
@@ -238,6 +211,5 @@ export async function GET() {
     tiles,
     contributors,
     detractors,
-    insights,
   });
 }

@@ -2,7 +2,14 @@
 
 import { CubeCell } from "@/components/cube-cell";
 import { VERSIONS, type VersionId } from "@/lib/jedox/schema";
-import { formatEur, formatEurCompact, formatPct, formatDelta, signedClass } from "@/lib/format";
+import {
+  formatEur,
+  formatEurCompact,
+  formatPct,
+  formatDelta,
+  varianceClass,
+  favourable,
+} from "@/lib/format";
 import { useMateriality } from "@/lib/store/materiality";
 
 interface Row {
@@ -124,7 +131,7 @@ export function StatementTable({ rows, entity, ytdPeriod, ytdPyPeriod, asOfPerio
                   />
                 </td>
                 <td className="text-right px-3 py-1.5 tabular-nums">
-                  <DeltaChip value={r.deltaBudget} pct={r.deltaPctBudget} isPct={r.isPct} />
+                  <DeltaChip account={r.id} value={r.deltaBudget} pct={r.deltaPctBudget} isPct={r.isPct} />
                 </td>
                 {showForecast && (
                   <>
@@ -167,7 +174,7 @@ export function StatementTable({ rows, entity, ytdPeriod, ytdPyPeriod, asOfPerio
                   />
                 </td>
                 <td className="text-right px-3 py-1.5 tabular-nums">
-                  <DeltaChip value={r.deltaYoY} pct={r.deltaPctYoY} isPct={r.isPct} muted />
+                  <DeltaChip account={r.id} value={r.deltaYoY} pct={r.deltaPctYoY} isPct={r.isPct} muted />
                 </td>
               </tr>
             );
@@ -200,11 +207,14 @@ function CellOrPct({
 }
 
 function DeltaChip({
+  account,
   value,
   pct,
   isPct,
   muted,
 }: {
+  /** Account id drives polarity (expense vs income). */
+  account: string;
   value: number | null;
   pct: number | null;
   isPct?: boolean;
@@ -212,8 +222,16 @@ function DeltaChip({
 }) {
   if (value === null) return <span className="text-muted-foreground">—</span>;
   const positive = value > 0;
-  const bg = positive ? "bg-positive-soft" : value < 0 ? "bg-negative-soft" : "bg-muted";
-  const text = signedClass(value);
+  // Colour by favourability, not raw sign — so +€1M OpEx vs Budget is RED,
+  // −€1M OpEx vs Budget is GREEN, and income-side accounts flip.
+  const fav = favourable(account, value);
+  const bg =
+    fav === null
+      ? "bg-muted"
+      : fav
+      ? "bg-positive-soft"
+      : "bg-negative-soft";
+  const text = varianceClass(account, value);
   return (
     <span className={`inline-flex items-center gap-1 rounded-sm px-1.5 py-0.5 ${bg} ${muted ? "opacity-80" : ""}`}>
       <span className={`${text} font-medium`}>

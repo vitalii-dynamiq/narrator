@@ -5,7 +5,9 @@ import { useQuery } from "@tanstack/react-query";
 import { Card } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Database, GitBranch, Binary, Layers, Search, ArrowRight } from "lucide-react";
+import { Database, GitBranch, Binary, Layers, Search, ArrowRight, Table as TableIcon } from "lucide-react";
+import { CubeCell } from "@/components/cube-cell";
+import { formatCellValueCompact } from "@/lib/format";
 import { Input } from "@/components/ui/input";
 
 interface SchemaResponse {
@@ -239,6 +241,10 @@ export function DataModelExplorer() {
               Rules <span className="ml-1 text-muted-foreground">{filteredRules.length}</span>
             </TabsTrigger>
             <TabsTrigger value="accounts">Accounts</TabsTrigger>
+            <TabsTrigger value="sample" className="gap-1">
+              <TableIcon className="h-3 w-3" />
+              Sample Data
+            </TabsTrigger>
           </TabsList>
 
           <TabsContent value="cubes" className="m-0 p-5 space-y-3">
@@ -463,8 +469,128 @@ export function DataModelExplorer() {
               </span>
             </div>
           </TabsContent>
+
+          <TabsContent value="sample" className="m-0 p-5">
+            <SampleData />
+          </TabsContent>
         </Tabs>
       </Card>
+    </div>
+  );
+}
+
+interface SampleResponse {
+  account: string;
+  period: string;
+  versions: { id: string; label: string }[];
+  rows: Array<{
+    entityId: string;
+    entityLabel: string;
+    industry: string | null;
+    geography: string | null;
+    cells: Array<{ version: string; label: string; value: number | null }>;
+  }>;
+}
+
+function SampleData() {
+  const [account, setAccount] = useState("Revenue");
+  const { data, isLoading } = useQuery({
+    queryKey: ["schema-sample", account],
+    queryFn: async () => {
+      const r = await fetch(`/api/schema/sample?account=${encodeURIComponent(account)}`);
+      if (!r.ok) throw new Error("Sample fetch failed");
+      return (await r.json()) as SampleResponse;
+    },
+    staleTime: 60_000,
+  });
+
+  const accountOptions = ["Revenue", "EBITDA", "EBITDAMarginPct", "NetDebt", "FCF"];
+
+  return (
+    <div className="space-y-3">
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="text-[11.5px] text-muted-foreground">Account:</span>
+        {accountOptions.map((a) => (
+          <button
+            key={a}
+            onClick={() => setAccount(a)}
+            className={`rounded-full px-2.5 py-0.5 text-[11px] transition ${
+              account === a
+                ? "bg-accent-blue text-background"
+                : "border border-border/80 text-muted-foreground hover:text-foreground hover:border-border"
+            }`}
+          >
+            {a}
+          </button>
+        ))}
+      </div>
+
+      <div className="text-[12px] text-muted-foreground">
+        Live slice of <span className="font-mono text-foreground">{account}</span> at{" "}
+        <span className="font-mono text-foreground">{data?.period ?? "…"}</span> across 6 entities ·
+        every value comes from <span className="font-mono">resolve()</span>. Click any number for
+        full cell detail.
+      </div>
+
+      <div className="overflow-x-auto rounded-md border border-border/70">
+        <table className="w-full text-[13px] border-collapse">
+          <thead className="bg-muted/40 text-[11px] uppercase tracking-[0.06em] text-muted-foreground font-medium">
+            <tr>
+              <th className="px-3 py-2 text-left">Entity</th>
+              <th className="px-3 py-2 text-left">Industry · Geo</th>
+              {data?.versions.map((v) => (
+                <th key={v.id} className="px-3 py-2 text-right">
+                  {v.label}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-border/60">
+            {isLoading && (
+              <tr>
+                <td colSpan={4} className="px-3 py-6 text-center text-muted-foreground italic">
+                  loading…
+                </td>
+              </tr>
+            )}
+            {data?.rows.map((row) => (
+              <tr key={row.entityId} className="hover:bg-muted/30 transition">
+                <td className="px-3 py-2 font-mono text-[11.5px]">
+                  {row.entityLabel}
+                  <div className="text-[10px] text-muted-foreground">{row.entityId}</div>
+                </td>
+                <td className="px-3 py-2 text-[11.5px] text-muted-foreground">
+                  {[row.industry, row.geography].filter(Boolean).join(" · ") || "—"}
+                </td>
+                {row.cells.map((c) => (
+                  <td
+                    key={c.version}
+                    className="px-3 py-2 text-right tabular-nums font-mono text-[12px]"
+                  >
+                    {c.value === null ? (
+                      <span className="text-muted-foreground">—</span>
+                    ) : (
+                      <CubeCell
+                        ref_={{
+                          entity: row.entityId,
+                          account,
+                          time: data.period,
+                          version: c.version,
+                        }}
+                        value={c.value}
+                        compact
+                        className="hover:text-accent-blue"
+                      >
+                        {formatCellValueCompact(c.value, account)}
+                      </CubeCell>
+                    )}
+                  </td>
+                ))}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }

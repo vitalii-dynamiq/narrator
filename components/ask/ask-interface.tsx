@@ -15,7 +15,8 @@ import { SectionCard } from "./section-card";
 import { EvidenceDrawer } from "./evidence-drawer";
 import { useRunStore } from "@/lib/store/run";
 import { useShallow } from "zustand/react/shallow";
-import { ConversationIdProvider } from "./conversation-context";
+import { useChatHistory, titleFromQuestion } from "@/lib/chat-history/store";
+import type { ConversationTranscript } from "@/lib/chat-history/types";
 
 const SUGGESTED = [
   "Why did Fortuna DE underperform this quarter?",
@@ -37,13 +38,24 @@ export function AskInterface({ initialQuestion }: { initialQuestion: string }) {
   const [turns, setTurns] = useState<Turn[]>([]);
   // Conversation id is assigned by the server on the first POST and reused on
   // every subsequent turn so Opus 4.7 sees the full prior-turn context.
-  // Can also be seeded via ?conv= on the URL — that's how "Explain this
-  // number" lands back in the original chat.
+  // Can also be seeded via ?conv= on the URL — that's how the sidebar row
+  // lands back in the original chat.
   const [conversationId, setConversationId] = useState<string | null>(
     () => searchParams.get("conv")
   );
+  const [expiredForId, setExpiredForId] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const lastAutoSubmitted = useRef<string | null>(null);
+
+  // Chat-history store (localStorage-backed).
+  const hydrateHistory = useChatHistory((s) => s.hydrate);
+  const upsertHistory = useChatHistory((s) => s.upsert);
+  const bumpUpdated = useChatHistory((s) => s.bumpUpdated);
+  const historyEntries = useChatHistory((s) => s.entries);
+
+  useEffect(() => {
+    hydrateHistory();
+  }, [hydrateHistory]);
 
   const submit = useMutation({
     mutationFn: async (question: string) => {
@@ -60,9 +72,24 @@ export function AskInterface({ initialQuestion }: { initialQuestion: string }) {
       return (await r.json()) as { runId: string; conversationId: string };
     },
     onSuccess: ({ runId, conversationId: newId }, question) => {
-      if (!conversationId) setConversationId(newId);
+      const isFirstTurn = conversationId == null;
+      if (isFirstTurn) setConversationId(newId);
       setTurns((t) => [...t, { id: runId, question, runId }]);
       setDraft("");
+
+      // Record in the sidebar catalog. First turn creates the entry; later
+      // turns bump updatedAt so recency sort stays accurate.
+      if (isFirstTurn) {
+        upsertHistory({
+          id: newId,
+          title: titleFromQuestion(question, 60),
+          firstQuestion: question,
+          createdAt: Date.now(),
+          updatedAt: Date.now(),
+        });
+      } else {
+        bumpUpdated(newId);
+      }
     },
   });
 
@@ -77,6 +104,38 @@ export function AskInterface({ initialQuestion }: { initialQuestion: string }) {
     lastAutoSubmitted.current = trimmed;
     submit.mutate(trimmed);
   }, [searchParams, initialQuestion, submit]);
+
+  // Rehydrate a prior conversation on mount when the URL carries ?conv=<id>
+  // and no local turns exist yet. The existing runtime SSE buffer will replay
+  // events for each runId on subscribe (see lib/agents/runtime.ts).
+  const rehydratedRef = useRef(false);
+  useEffect(() => {
+    const convId = searchParams.get("conv");
+    if (!convId) return;
+    if (rehydratedRef.current) return;
+    if (turns.length > 0) return;
+    if (searchParams.get("q")) return; // auto-submit path handles ?q= explicitly
+    rehydratedRef.current = true;
+
+    let cancelled = false;
+    (async () => {
+      const r = await fetch(`/api/conversations/${encodeURIComponent(convId)}`);
+      if (cancelled) return;
+      if (r.status === 410) {
+        setExpiredForId(convId);
+        return;
+      }
+      if (!r.ok) return;
+      const data = (await r.json()) as ConversationTranscript;
+      if (cancelled) return;
+      setTurns(
+        data.turns.map((t) => ({ id: t.runId, question: t.question, runId: t.runId }))
+      );
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [searchParams, turns.length]);
 
   useEffect(() => {
     if (turns.length > 0) {
@@ -162,11 +221,23 @@ export function AskInterface({ initialQuestion }: { initialQuestion: string }) {
   };
 
   return (
-    <ConversationIdProvider value={conversationId}>
     <div className={`flex flex-col h-[calc(100vh-52px)] transition-[padding] duration-200 ${mainShift}`}>
       <div ref={scrollRef} className="flex-1 overflow-y-auto scrollbar-thin">
         <div className="mx-auto max-w-[820px] px-4 md:px-6">
-          {empty && <HeroBlock onPick={(q) => submit.mutate(q)} />}
+          {expiredForId && (
+            <ExpiredConversation
+              conversationId={expiredForId}
+              restorableFirstQuestion={
+                historyEntries.find((e) => e.id === expiredForId)?.firstQuestion ?? null
+              }
+              onRestart={(q) => {
+                setExpiredForId(null);
+                setConversationId(null);
+                submit.mutate(q);
+              }}
+            />
+          )}
+          {empty && !expiredForId && <HeroBlock onPick={(q) => submit.mutate(q)} />}
           {!empty && (
             <div className="py-6 space-y-10">
               {turns.map((t) => (
@@ -250,7 +321,40 @@ export function AskInterface({ initialQuestion }: { initialQuestion: string }) {
       </div>
       <EvidenceDrawer open={drawerOpen} onOpenChange={setDrawerOpen} runs={runs} />
     </div>
-    </ConversationIdProvider>
+  );
+}
+
+function ExpiredConversation({
+  conversationId,
+  restorableFirstQuestion,
+  onRestart,
+}: {
+  conversationId: string;
+  restorableFirstQuestion: string | null;
+  onRestart: (question: string) => void;
+}) {
+  return (
+    <div className="py-16 space-y-4 text-center">
+      <div className="mx-auto max-w-md space-y-3">
+        <AlertTriangle className="h-6 w-6 text-muted-foreground mx-auto" strokeWidth={2.2} />
+        <h2 className="text-[18px] font-semibold">Conversation expired</h2>
+        <p className="text-[13px] text-muted-foreground leading-snug">
+          This chat is no longer available — conversations age out after 6 hours (and on every
+          server restart). The history row for{" "}
+          <span className="font-mono text-[12px] text-foreground">{conversationId}</span> is still
+          in your sidebar; you can remove it or start fresh with the same question below.
+        </p>
+        {restorableFirstQuestion && (
+          <Button
+            onClick={() => onRestart(restorableFirstQuestion)}
+            size="sm"
+            className="mt-2"
+          >
+            Start a new conversation with this question
+          </Button>
+        )}
+      </div>
+    </div>
   );
 }
 

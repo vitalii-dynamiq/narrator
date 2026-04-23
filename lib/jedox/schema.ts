@@ -143,6 +143,69 @@ export const ACCOUNT_DERIVED = {
 export type AccountDerived =
   (typeof ACCOUNT_DERIVED)[keyof typeof ACCOUNT_DERIVED];
 
+// -------------------- Stock vs flow classification --------------------
+// Flow accounts (Revenue, EBITDA, CapEx, …) are additive across time — a YTD
+// value is the sum of the months in the window. Stock accounts (Cash, Debt,
+// Equity, …) are point-in-time snapshots — a YTD value is the end-of-window
+// balance, NOT the sum of monthly snapshots (summing would 3× a Q1-YTD cash
+// balance). The resolver honours this via `isStockAccount()`.
+
+export const STOCK_LEAVES: ReadonlySet<string> = new Set<string>([
+  ACCOUNT_LEAVES.Cash,
+  ACCOUNT_LEAVES.Receivables,
+  ACCOUNT_LEAVES.Inventory,
+  ACCOUNT_LEAVES.PPE,
+  ACCOUNT_LEAVES.Goodwill,
+  ACCOUNT_LEAVES.Payables,
+  ACCOUNT_LEAVES.ShortTermDebt,
+  ACCOUNT_LEAVES.LongTermDebt,
+  ACCOUNT_LEAVES.Equity,
+  // Headcount is a point-in-time count (not a running total of months).
+  ACCOUNT_LEAVES.Headcount,
+]);
+
+export const STOCK_DERIVED: ReadonlySet<string> = new Set<string>([
+  ACCOUNT_DERIVED.TotalDebt,
+  ACCOUNT_DERIVED.NetDebt,
+  ACCOUNT_DERIVED.TotalAssets,
+  ACCOUNT_DERIVED.WorkingCapital,
+]);
+
+export function isStockAccount(account: string): boolean {
+  return STOCK_LEAVES.has(account) || STOCK_DERIVED.has(account);
+}
+
+// -------------------- Account polarity --------------------
+// "positive" — higher Actual vs Budget is favourable (Revenue, margins, EBITDA, FCF, Equity).
+// "negative" — higher Actual vs Budget is unfavourable (costs, taxes, debt).
+// Used by the UI to colour variance deltas correctly: +€1M OpEx vs Budget is
+// RED (worse), not green.
+
+export type AccountPolarity = "positive" | "negative";
+
+const NEGATIVE_POLARITY: ReadonlySet<string> = new Set<string>([
+  ACCOUNT_LEAVES.COGS_Material,
+  ACCOUNT_LEAVES.COGS_Labor,
+  ACCOUNT_LEAVES.OpEx_SG_A,
+  ACCOUNT_LEAVES.OpEx_R_D,
+  ACCOUNT_LEAVES.OpEx_Marketing,
+  ACCOUNT_LEAVES.DA,
+  ACCOUNT_LEAVES.Interest,
+  ACCOUNT_LEAVES.Tax,
+  ACCOUNT_LEAVES.CapEx,
+  ACCOUNT_LEAVES.ShortTermDebt,
+  ACCOUNT_LEAVES.LongTermDebt,
+  ACCOUNT_LEAVES.Payables,
+  ACCOUNT_DERIVED.COGS,
+  ACCOUNT_DERIVED.OpEx,
+  ACCOUNT_DERIVED.TotalDebt,
+  ACCOUNT_DERIVED.NetDebt,
+]);
+
+export function accountPolarity(account: string): AccountPolarity {
+  return NEGATIVE_POLARITY.has(account) ? "negative" : "positive";
+}
+
 // -------------------- Versions --------------------
 
 export const VERSIONS = {

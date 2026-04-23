@@ -118,3 +118,54 @@ export function unitLabel(account: string): string {
   if (unit === "count") return "";
   return "EUR";
 }
+
+/**
+ * Pick a sensible Y-axis domain for a time-series chart so that percent and
+ * ratio accounts don't render as a sub-pixel flat line. For € / count
+ * accounts Recharts' auto-scale is fine (a 10× range is not sub-pixel).
+ *
+ * The window is data-aware: we pad [min, max] by 10% of the series range
+ * (floored at 50bps for percent accounts so a stable margin shows some
+ * breathing room instead of zooming into noise).
+ */
+import { accountPolarity } from "@/lib/jedox/schema";
+
+/**
+ * Is a given delta favourable for this account? For positive-polarity accounts
+ * (Revenue, EBITDA, margin, Equity), favourable = delta > 0. For negative-
+ * polarity ones (OpEx, COGS, Tax, NetDebt, …), favourable = delta < 0. Zero
+ * is neutral. Use this to colour variance cells in the statement table — a
+ * +€1M OpEx vs Budget is RED (worse), not green.
+ */
+export function favourable(account: string, delta: number): boolean | null {
+  if (delta === 0 || !Number.isFinite(delta)) return null;
+  return accountPolarity(account) === "positive" ? delta > 0 : delta < 0;
+}
+
+/** Tailwind class for a variance cell based on polarity. */
+export function varianceClass(account: string, delta: number | null | undefined): string {
+  if (delta == null || !Number.isFinite(delta) || delta === 0) return "text-muted-foreground";
+  const fav = favourable(account, delta);
+  return fav === null ? "text-muted-foreground" : fav ? "text-positive" : "text-negative";
+}
+
+export function chartDomain(
+  account: string,
+  series: Array<{ value: number } | number>
+): [number, number] | undefined {
+  const unit = accountUnit(account);
+  if (unit !== "percent" && unit !== "ratio" && unit !== "multiple") {
+    // EUR / count: let Recharts decide.
+    return undefined;
+  }
+  const values = series
+    .map((s) => (typeof s === "number" ? s : s.value))
+    .filter((v): v is number => Number.isFinite(v));
+  if (values.length === 0) return undefined;
+  const min = Math.min(...values);
+  const max = Math.max(...values);
+  const range = max - min;
+  const floor = unit === "multiple" ? 0.5 : 0.005; // 50 bps min window for %
+  const pad = Math.max(range * 0.1, floor / 2);
+  return [min - pad, max + pad];
+}

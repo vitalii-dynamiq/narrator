@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { Suspense } from "react";
 import {
   LayoutGrid,
   GitBranch,
@@ -10,6 +11,7 @@ import {
   Sparkles,
 } from "lucide-react";
 import { HierarchyTree } from "./hierarchy-tree";
+import { ConversationsList } from "./conversations-list";
 
 const NAV = [
   { href: "/ask", label: "Ask UNITY", icon: Sparkles },
@@ -63,8 +65,13 @@ export function SidebarContent({ className = "" }: { className?: string }) {
         </div>
       </div>
 
-      <div className="flex-1 min-h-0 overflow-y-auto scrollbar-thin px-1 pb-3">
+      <div className="flex-1 min-h-0 overflow-y-auto scrollbar-thin px-1 pb-1">
         <HierarchyTree />
+        <div className="mt-3 border-t border-border/70 pt-3">
+          <Suspense fallback={null}>
+            <ConversationsList />
+          </Suspense>
+        </div>
       </div>
     </div>
   );
