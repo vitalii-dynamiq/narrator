@@ -454,12 +454,15 @@ const RULES: Record<string, { expr: string; fn: DerivationFn; deps: string[] }> 
     }),
   },
   [ACCOUNT_DERIVED.FCF]: {
-    expr: "[EBITDA] − [CapEx] − [Tax]",
-    deps: [ACCOUNT_DERIVED.EBITDA, ACCOUNT_LEAVES.CapEx, ACCOUNT_LEAVES.Tax],
+    // FCF reconciled to the cash-flow statement: operating cash net of
+    // investing cash. Ties visually to the CF rows immediately above it so a
+    // reviewer can see the identity FCF = CFO + CFI at a glance.
+    expr: "[CF_Operating] + [CF_Investing]",
+    deps: [ACCOUNT_LEAVES.CF_Operating, ACCOUNT_LEAVES.CF_Investing],
     fn: (s) => ({
       value:
-        (s[ACCOUNT_DERIVED.EBITDA] ?? 0) - (s[ACCOUNT_LEAVES.CapEx] ?? 0) - (s[ACCOUNT_LEAVES.Tax] ?? 0),
-      deps: [ACCOUNT_DERIVED.EBITDA, ACCOUNT_LEAVES.CapEx, ACCOUNT_LEAVES.Tax],
+        (s[ACCOUNT_LEAVES.CF_Operating] ?? 0) + (s[ACCOUNT_LEAVES.CF_Investing] ?? 0),
+      deps: [ACCOUNT_LEAVES.CF_Operating, ACCOUNT_LEAVES.CF_Investing],
     }),
   },
 };

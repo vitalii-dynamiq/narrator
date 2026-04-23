@@ -61,6 +61,5 @@ Screenshot*.png
 # Claude Code workspace (local agent state)
 .claude/
 
-# Original client RFP — local reference only, not for a public repo.
-rfp-reference.pdf
-rfp-*.pdf
+# PDFs — source material, client docs, exports. Never commit.
+*.pdf

@@ -205,8 +205,13 @@ function generateTrajectory(
     cash[i] = Math.max(0, cash[i - 1] + cfOp[i] + cfInv[i] + cfFin[i]);
   }
 
+  // Book equity is the accounting identity — Total Assets − Total Liabilities —
+  // so the BS view reconciles: Cash + Receivables + Inventory + PPE + Goodwill
+  // − Payables − ShortTermDebt − LongTermDebt = Equity.
   const equity = revenue.map(
-    (_, i) => goodwill[i] + ppe[i] * 0.5 + cash[i] - shortTermDebt[i] - longTermDebt[i]
+    (_, i) =>
+      cash[i] + receivables[i] + inventory[i] + ppe[i] + goodwill[i] -
+      payables[i] - shortTermDebt[i] - longTermDebt[i]
   );
 
   // Operational
