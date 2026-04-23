@@ -30,12 +30,37 @@ yarn-debug.log*
 yarn-error.log*
 .pnpm-debug.log*
 
-# env files (can opt-in for committing if needed)
-.env*
+# env files — keep .env.example, ignore everything else
+.env
+.env.*
+!.env.example
 
-# vercel
+# vercel / railway
 .vercel
+.railway
+/railway.deploy.log
 
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# local docker overrides
+docker-compose.override.yml
+
+# editor + local scratch
+.idea
+.vscode
+*.swp
+*.log
+
+# scratch screenshots
+screenshot*.png
+Screenshot*.png
+/tmp-*
+
+# Claude Code workspace (local agent state)
+.claude/
+
+# Original client RFP — local reference only, not for a public repo.
+rfp-reference.pdf
+rfp-*.pdf

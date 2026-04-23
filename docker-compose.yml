@@ -1,0 +1,38 @@
+# Local parity for the Railway production stack. One Next.js service, memory
+# bind-mounted so the agent can write to disk and you can inspect files live.
+#
+# Usage:
+#   docker compose up --build
+#   UNITY_PORT=9340 docker compose up        # sidestep port collisions
+#
+# Requires .env.local with ANTHROPIC_API_KEY — never commit it.
+
+services:
+  unity:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: unity-narrator:local
+    container_name: unity-narrator
+    ports:
+      # Non-default 7340; override with UNITY_PORT=<n> docker compose up if it
+      # collides with another service on this machine.
+      - "${UNITY_PORT:-7340}:7340"
+    environment:
+      PORT: "7340"
+      HOSTNAME: "0.0.0.0"
+      NODE_ENV: "production"
+    env_file:
+      # .env.local is gitignored; put ANTHROPIC_API_KEY=... in it.
+      - .env.local
+    volumes:
+      # Live-edit memory files from the host without rebuilding.
+      - ./memories/claude:/app/memories/claude
+    restart: unless-stopped
+    # Healthcheck — Next.js responds on /; treat 200 as up.
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:7340/"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s

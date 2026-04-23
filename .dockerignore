@@ -1,0 +1,55 @@
+# Keep the image lean — ship only what the build + runtime need.
+
+# Node
+node_modules
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+
+# Next.js build output (the runtime stage copies what it needs from the builder stage)
+.next
+out
+build
+.turbo
+
+# Git / editor / OS
+.git
+.gitignore
+.gitattributes
+.github
+.vscode
+.idea
+.DS_Store
+*.swp
+
+# Tests + coverage — not needed in the runtime image
+test
+coverage
+vitest.config.ts
+
+# Local env (never bake secrets into an image)
+.env
+.env.*
+!.env.example
+
+# Local docker (Dockerfile itself is read by the daemon separately; entrypoint
+# is COPY'd into the runtime so it must stay in the context).
+docker-compose.yml
+docker-compose.override.yml
+.dockerignore
+
+# Plans, screenshots, scratch
+*.log
+*.pem
+*.png
+*.jpg
+*.jpeg
+*.gif
+docs
+scripts/local-*
+.claude
+.railway
+
+# Next telemetry
+.next-telemetry

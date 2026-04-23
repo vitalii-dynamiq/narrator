@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" fill="none">
+  <!-- Dark tile -->
+  <rect width="32" height="32" rx="7" fill="#0B0F19"/>
+  <!-- 3×3 grid of cube cells — eight muted + one highlighted.
+       Direct visual metaphor for "a selected cell in the cube". -->
+  <g fill="#94A3B8" opacity="0.28">
+    <rect x="6" y="6"  width="6" height="6" rx="1"/>
+    <rect x="13" y="6" width="6" height="6" rx="1"/>
+    <rect x="20" y="6" width="6" height="6" rx="1"/>
+    <rect x="6"  y="13" width="6" height="6" rx="1"/>
+    <rect x="20" y="13" width="6" height="6" rx="1"/>
+    <rect x="6"  y="20" width="6" height="6" rx="1"/>
+    <rect x="13" y="20" width="6" height="6" rx="1"/>
+    <rect x="20" y="20" width="6" height="6" rx="1"/>
+  </g>
+  <!-- Highlighted (selected) cell — centre -->
+  <rect x="13" y="13" width="6" height="6" rx="1" fill="#E9B547"/>
+</svg>
