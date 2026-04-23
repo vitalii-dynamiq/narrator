@@ -80,8 +80,8 @@ export async function runOrchestrator(runId: string, req: OrchestratorRequest) {
         id: orchestratorNodeId,
         kind: "agent",
         agentId: "planner",
-        label: "Orchestrator · Opus 4.7 adaptive",
-        model: MODELS.OPUS,
+        label: "Orchestrator · Sonnet 4.6 adaptive",
+        model: MODELS.SONNET,
         summary: "LLM-driven analysis — decides which tools to call",
       },
     });
@@ -145,9 +145,11 @@ async function runRealLoop(
     try {
       const stream = client.messages.stream(
         {
-          model: MODELS.OPUS,
+          model: MODELS.SONNET,
           max_tokens: MAX_OUTPUT_TOKENS,
-          thinking: { type: "adaptive", display: "summarized" },
+          // Sonnet 4.6 returns summarized thinking text by default; the
+          // `display` knob is Opus 4.7-only, so we don't set it here.
+          thinking: { type: "adaptive" },
           system: [
             {
               type: "text",

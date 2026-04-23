@@ -29,8 +29,8 @@ export async function GET() {
     agent: {
       id: "orchestrator",
       label: "UNITY Orchestrator",
-      model: MODELS.OPUS,
-      thinking: "adaptive (summarized)",
+      model: MODELS.SONNET,
+      thinking: "adaptive",
       system: ORCHESTRATOR_SYSTEM,
     },
     tools: [...tools, ...serverTools],
